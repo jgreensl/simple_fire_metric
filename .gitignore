@@ -1,0 +1,15 @@
+# ignore stuff in data dir
+data/**
+
+# ignore figures too for now
+figures/**
+
+# ignore log files
+logs/**
+*.[oe][0-9][0-9][0-9]*
+
+# ignore python cache stuff
+__pycache__/**
+**/.ipynb_checkpoints/**
+
+
