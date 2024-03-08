@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -P en0
+#PBS -q normalbw
+#PBS -N aus_ffdi
+#PBS -l walltime=24:00:00
+#PBS -l mem=240GB
+#PBS -l ncpus=16
+#PBS -l wd
+#PBS -l storage=gdata/rt52+gdata/hh5+gdata/en0+scratch/en0
+#PBS -oe
+
+source /g/data/hh5/public/apps/miniconda3/etc/profile.d/conda.sh
+conda activate /g/data/hh5/public/apps/miniconda3/envs/analysis3
+
+# Setup a suitable log directory
+mkdir -p /scratch/en0/jwg574/ERA5/
+
+# Run this python
+python make_Aus_ERA5.py
+
+echo "Finished: $(date '+%Y-%m-%d %H:%M:%S')"

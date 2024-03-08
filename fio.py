@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from glob import glob
 import regionmask
-import pickle,warnings
+import pickle,warnings, os
 
 __VERBOSE__=False
 AU_LATRANGE = [-48,-9]
@@ -15,7 +15,12 @@ AU_LONRANGE = [111,155]
 ## CONSTANTS
 
 BARPA_daily_max_folder = '/scratch/en0/jwg574/BARPA/daily_maximums/'
-BARPA_base_url = "/g/data/ia39/australian-climate-service/release/CORDEX-CMIP6/output/AUS-15/BOM/%s/%s/%s/BOM-BARPA-R/v1/%s/%s/"
+BARPA_monthly_max_folder = '/scratch/en0/jwg574/BARPA/monthly_maximums/'
+ERA5_monthly_max_folder = '/scratch/en0/jwg574/ERA5/monthly_maximums/'
+# /g/data/py18/BARPA/output/CMIP6/DD/AUS-15/BOM/<GCM>/<experiment>/<realisation>/BARPA-R/v1-r1/<freq>/<variable>/V20231001/<yearly netcdf files>
+BARPA_base_url = "/g/data/py18/BARPA/output/CMIP6/DD/AUS-15/BOM/%s/%s/%s/BARPA-R/v1-r1/%s/%s/%s/"
+BARPA_base_url_OLD_ia39 = "/g/data/ia39/australian-climate-service/release/CORDEX-CMIP6/output/AUS-15/BOM/%s/%s/%s/BOM-BARPA-R/v1/%s/%s/"
+
 
 # map metric names to folder names
 ERA5_varmap={
@@ -61,7 +66,7 @@ def print_info(msg):
         print("INFO: ",msg)
     
 def BARPA_intermediate_url(year,
-                            gcm = "CMCC-CMCC-ESM2",
+                            gcm = "CMCC-ESM2",
                             experiment = "ssp370",
                             realisation = "r1i1p1f1",
                             #freq = "1hr", I don't think I'll use things other than 1hr
@@ -70,7 +75,7 @@ def BARPA_intermediate_url(year,
     return "%s_%s_%s_%s.nc"%(str(year),gcm,experiment,realisation)
 
 def BARPA_read_intermediate_years(ystr,
-                                  gcm = "CMCC-CMCC-ESM2",
+                                  gcm = "CMCC-ESM2",
                                   experiment = "ssp370",
                                   realisation = "r1i1p1f1",
                                  ):
@@ -82,7 +87,7 @@ def BARPA_read_intermediate_years(ystr,
     return ds
 
 def BARPA_read_year(vars, year, 
-                    gcm = "CMCC-CMCC-ESM2",
+                    gcm = "CMCC-ESM2",
                     experiment = "ssp370",
                     realisation = "r1i1p1f1",
                     freq = "1hr",):
@@ -94,6 +99,7 @@ def BARPA_read_year(vars, year,
         url_barpa_files = glob(url_barpa_folder+"*%s01-*.nc"%year)
         if len(url_barpa_files) < 1:
             print("ERROR: No Files Found:",url_barpa_folder)
+            print("ERROR: var,year,...:",var,year,gcm,experiment,realisation)
         url_barpa_file = url_barpa_files[0]
         print("INFO: reading from ",url_barpa_file)
 
@@ -115,16 +121,27 @@ def BARPA_read_year(vars, year,
     return ds
 
 def BARPA_var_folder(var,
-                     gcm = "CMCC-CMCC-ESM2",
+                     gcm = "CMCC-ESM2",
                      experiment = "ssp370",
                      realisation = "r1i1p1f1",
                      freq = "1hr",
+                     version = 'v20231001',
                     ):
-    url_barpa_folder = BARPA_base_url%(gcm,experiment,realisation,freq,var)
+    """
+    For any variable name return the folder holding all the netcdf data
+    
+    Inputs: (all strings)
+        var = variable name in BARPA
+        gcm = global climate model eg: 'CMCC-ESM2', or 'ACCESS-ESM1-5'
+        experiment = barpa model experiment eg: 'ssp370', or 'historical'
+        freq = output time frequency eg: '1hr', or '6hr'
+        version = barpa output version, currently seems to be just v20231001
+    """
+    url_barpa_folder = BARPA_base_url%(gcm,experiment,realisation,freq,var,version)
     return url_barpa_folder
 
 def BARPA_var_url(var, year,
-                   gcm = "CMCC-CMCC-ESM2",
+                   gcm = "CMCC-ESM2",
                    experiment = "ssp370",
                    realisation = "r1i1p1f1",
                    freq = "1hr",
@@ -221,6 +238,42 @@ def calc_ffdi_replacements(ds,d2m='d2m',t2m='t2m',u10='u10',v10='v10',DF=10):
     ds.FFDI_P.attrs['description']='5/3 * DF * DWI_V'
     
     return ds
+
+def calc_monthly_components(da,metric,components):
+    """
+    monthly loop over <metric>, picking out maximum, and the components producing that maximum
+    new da with variables: [metric, metric_component1,... ]
+    ARGUMENTS:
+        da, # DataArray with both metrics, and components, as data variables on time,lat,lon coords
+        metric, # "FFDI", "DWI_V", or "FFDI_F" 
+        components, #["tas","s10", "Td", ...]
+    """
+    
+    # Resample the data array input to get monthly data
+    # 'ME' means monthly groups with time label on End of month
+    da_r = da[metric].resample(time='M')
+    
+    ds_months = None
+    for time_stamp, da_month in da_r:
+        dict_month = {}
+        
+        da_max = da_month.compute().max(dim='time')
+        da_imax = da_month==da_max # indices where da_month == da_max value
+        
+        for component in components:
+            # min collapses time dimension to first instance where da matches da_max
+            # there should only be one instance anyway, but the time dim will be there until we collapse it
+            component_max = da[component].where(da_imax).min("time")
+            dict_month["%s_%s"%(metric,component)] = component_max
+        
+        dict_month[metric] = da_max
+        ds_month = xr.Dataset(dict_month)
+        if ds_months is None:
+            ds_months=ds_month
+        else:
+            ds_months = xr.concat([ds_months,ds_month],dim='time')
+
+    return ds_months
 
 def calc_rh(ds,d2m='d2m',t2m='t2m'):
     '''
@@ -324,8 +377,6 @@ def ERA5_read_month(varlist,day,latrange=[-60,20]):
     pdday = pd.to_datetime(str(day))
     yyyy,mm =  pdday.strftime('%Y,%m').split(',')
     ds = None
-    
-    
     
     # read month file for each var
     for var in varlist:
@@ -434,6 +485,129 @@ def get_time_series(locname, force_renew=False, verbose=False):
         pickle.dump(ts_places,ts_file)
     
     return ts_places
+
+def make_BARPA_monthly_maximum_intermediate(year, 
+                                            force_renew = False, 
+                                            gcm = "CMCC-ESM2", # climate model
+                                            experiment = "ssp370",
+                                            realisation = "r1i1p1f1",
+                                            freq = "1hr"):
+    """
+    Arguments:
+        year, # which year to create the files for
+        force_renew, # overwrite yearly maximum file if it already exists
+        gcm = "CMCC-ESM2", # climate model
+        experiment = "ssp370",
+        realisation = "r1i1p1f1",
+        freq = "1hr"
+    Returns nothing, file will be created in fio.BARPA_montly_max_folder
+    """
+
+    # Read data unless it's already done
+    fname = BARPA_monthly_max_folder+BARPA_intermediate_url(year,gcm,experiment,realisation)
+    if os.path.isfile(fname):
+        print("INFO: year %4d alread written at %s"%(year,fname))
+        # don't overwrite the file
+        if not force_renew:
+            return xr.load_dataset(fname)
+
+    # Read year of barpa data
+    print("INFO: Reading and calculating FFDI and friends for %4d"%year)
+    #vars, year, gcm = "CMCC-ESM2", experiment = "ssp370", realisation = "r1i1p1f1", freq = "1hr",
+    barpa = BARPA_read_year(vars=['hurs','tas','ps','uas','vas'], 
+                            year=year, 
+                            gcm=gcm,
+                            experiment=experiment,
+                            realisation=realisation,
+                            freq=freq,
+                           )
+    
+    # calculate FFDI_F, FFDI, DWI_V
+    barpa = calc_Td(barpa,t='tas',rh='hurs')
+    barpa = calc_ffdi(barpa,d2m='Td',t2m='tas',u10='uas',v10='vas')
+    barpa = calc_ffdi_replacements(barpa ,d2m='Td',t2m='tas',u10='uas',v10='vas')
+
+    # Calculate monthly maximum fire metrics, and the contributing components
+    monthlies = []
+    monthlies.append(calc_monthly_components(barpa,'FFDI',['tas','s10']))
+    monthlies.append(calc_monthly_components(barpa,'FFDI_F',['tas','s10','Td']))
+    monthlies.append(calc_monthly_components(barpa,'DWI_V',['tas','s10','Td']))
+    
+    # combine into single dataset
+    DS_monthlies = xr.combine_by_coords(monthlies)
+
+    # Update timestamps
+    mid_month_stamp = pd.date_range(start='%d-01-01'%year,periods=12,freq='MS')+timedelta(days=14)
+    DS_monthlies.assign_coords({"time": mid_month_stamp})
+    
+    # Save these monthly maximums to a file
+    os.makedirs(BARPA_monthly_max_folder,exist_ok=True)
+    print("INFO: Saving file %s"%fname)
+    DS_monthlies.to_netcdf(fname)
+    return DS_monthlies
+
+def make_ERA5_monthly_maximum_intermediate(
+    year, 
+    force_renew = False, ):
+    """
+    Arguments:
+        year, # which year to create the files for
+        force_renew, # overwrite yearly maximum file if it already exists
+    Returns nothing, file will be created in fio.ERA_montly_max_folder
+    """
+    
+    vars_for_ffdi = ['u10','v10','d2m','t2m']
+    
+    # Don't bother if data already exists
+    fname = ERA5_monthly_max_folder + "%4d.nc"%year
+    if os.path.isfile(fname):
+        print("INFO: year %4d alread written at %s"%(year,fname))
+    
+        if not force_renew:
+            return None
+
+    print("INFO: Reading and calculating FFDI and friends for %4d"%year)
+    monthlies = []
+    # first we build up a year of data
+    ds = None
+    for month in np.arange(12)+1:
+        # read month
+        month_str='%4d-%02d'%(year,month)
+        ds_month = ERA5_read_month(vars_for_ffdi, month_str)
+        
+        # combine along time axis
+        if ds is None:
+            ds = ds_month
+        else:
+            ds = xr.concat([ds,ds_month],'time')
+    
+    # subset to AUS
+    ds = ds.sel(latitude=slice(max(AU_LATRANGE),min(AU_LATRANGE)))
+    ds = ds.sel(longitude=slice(min(AU_LONRANGE),max(AU_LONRANGE)))
+    
+    # calculate FFDI_F, FFDI, DWI_V
+    ds = calc_ffdi(ds,d2m='d2m',t2m='t2m',u10='u10',v10='v10')
+    ds = calc_ffdi_replacements(ds ,d2m='d2m',t2m='t2m',u10='u10',v10='v10')
+
+    #print(ds)
+    # Calculate monthly maximum fire metrics, and the contributing components
+    monthlies.append(calc_monthly_components(ds,'FFDI',['t2m','s10']))
+    monthlies.append(calc_monthly_components(ds,'FFDI_F',['t2m','s10','d2m']))
+    monthlies.append(calc_monthly_components(ds,'DWI_V',['t2m','s10','d2m']))
+    
+    # combine into single dataset
+    DS_monthlies = xr.combine_by_coords(monthlies)
+
+    # Update timestamps
+    mid_month_stamp = pd.date_range(start='%d-01-01'%year,periods=12,freq='MS')+timedelta(days=14)
+    DS_monthlies = DS_monthlies.assign_coords({"time": mid_month_stamp})
+    
+    # Save these monthly maximums to a file
+    os.makedirs(ERA5_monthly_max_folder,exist_ok=True)
+    print("INFO: Saving file %s"%fname)
+    DS_monthlies.to_netcdf(fname,mode='w')
+    #return DS_monthlies
+    
 
 def read_enso_rolling3m():
     """https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"""
