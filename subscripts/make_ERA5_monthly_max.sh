@@ -1,9 +1,9 @@
 #!/bin/bash
 #PBS -P en0
-#PBS -q normal
+#PBS -q normalbw
 #PBS -N ERA5_MonthlyMax
-#PBS -l walltime=12:00:00
-#PBS -l mem=100GB
+#PBS -l walltime=8:00:00
+#PBS -l mem=160GB
 #PBS -l ncpus=16
 #PBS -l wd
 #PBS -l storage=gdata/rt52+gdata/hh5+gdata/en0+scratch/en0 
@@ -12,7 +12,7 @@
 if [ -z ${y0} ] || [ -z ${y1} ] ; then
     echo "EG usage: qsub -v y0=2015,y1=2017 ${0}"
     echo "        : to create yearly files for monthly maximum ERA5 metrics and friends"
-    echo "NB: X years takes around X hours, X RAM"
+    echo "NB: 15 years takes around 3 hours, 100 GB RAM"
     exit 0
 fi
 

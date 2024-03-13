@@ -2,17 +2,21 @@
 #PBS -P en0
 #PBS -q normal
 #PBS -N BARPA_MonthlyMax
-#PBS -l walltime=12:00:00
+#PBS -l walltime=4:00:00
 #PBS -l mem=100GB
 #PBS -l ncpus=16
 #PBS -l wd
 #PBS -l storage=gdata/py18+gdata/hh5+gdata/en0+scratch/en0 
+#PBS -j eo
+
+# normal queue, wd means run using local directory as working directory
+# -j eo combines std and err outputs into 1 file
 
 # Arguments required:
 if [ -z ${y0} ] || [ -z ${y1} ] ; then
     echo "EG usage: qsub -v y0=2015,y1=2017 ${0}"
     echo "        : can also set: gcm=CMCC-ESM2,experiment=ssp370,realisation=r1i1p1f1"
-    echo "NB: X years takes around X hours, X RAM"
+    echo "NB: 2 years takes around X hours, X RAM"
     exit 0
 fi
 
@@ -44,14 +48,6 @@ YEARS=range(${y0},${y1})
 GCM="${gcm}"
 EXPERIMENT="${experiment}"
 REALISATION="${realisation}"
-
-#make_BARPA_monthly_maximum_intermediate(
-#year, 
-#force_renew = False, 
-#gcm = "CMCC-ESM2", # climate model
-#experiment = "ssp370",
-#realisation = "r1i1p1f1",
-#freq = "1hr"):
 
 for year in YEARS:
     print("info: starting %d"%year)

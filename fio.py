@@ -7,6 +7,7 @@ import pandas as pd
 from glob import glob
 import regionmask
 import pickle,warnings, os
+from datetime import timedelta
 
 __VERBOSE__=False
 AU_LATRANGE = [-48,-9]
@@ -79,10 +80,12 @@ def BARPA_read_intermediate_years(ystr,
                                   experiment = "ssp370",
                                   realisation = "r1i1p1f1",
                                  ):
-    regex_urls = BARPA_daily_max_folder + BARPA_intermediate_url(ystr,gcm,experiment,realisation)
+    regex_urls = BARPA_monthly_max_folder + BARPA_intermediate_url(ystr,gcm,experiment,realisation)
     urls = glob(regex_urls)
     urls.sort()
     print("INFO: Reading %d BARPA dailymax files matching year %s"%(len(urls),ystr))
+    if len(urls) == 0:
+        print("ERROR: no urls in ",regex_urls)
     ds = xr.open_mfdataset(urls)
     return ds
 
@@ -101,7 +104,7 @@ def BARPA_read_year(vars, year,
             print("ERROR: No Files Found:",url_barpa_folder)
             print("ERROR: var,year,...:",var,year,gcm,experiment,realisation)
         url_barpa_file = url_barpa_files[0]
-        print("INFO: reading from ",url_barpa_file)
+        print("INFO: reading %s from %s"%(var,url_barpa_file))
 
         dsnew = xr.open_dataset(url_barpa_file,chunks='auto')
         
@@ -251,6 +254,8 @@ def calc_monthly_components(da,metric,components):
     
     # Resample the data array input to get monthly data
     # 'ME' means monthly groups with time label on End of month
+    # Currently (20240312) 'ME' fails, 'M' throws warning but OK
+    
     da_r = da[metric].resample(time='M')
     
     ds_months = None
@@ -314,10 +319,15 @@ def calc_Td(ds,t='tas',rh='hurs'):
     
     return ds
 
-def ERA5_read_dailymaximums():
-    ds_dm = xr.open_dataset("/scratch/en0/jwg574/ERA5/daily_maximums.nc")
-    #ausmask = get_landmask(pre_2000.FFDI)
-    return ds_dm
+def ERA5_read_intermediate(ystr='*'):
+    regex_urls = '%s%s.nc'%(ERA5_monthly_max_folder,ystr)
+    urls = glob(regex_urls)
+    urls.sort()
+    print("INFO: Reading %d ERA5 monthly max files matching year %s"%(len(urls),ystr))
+    if len(urls) == 0:
+        print("ERROR: no urls in ",regex_urls)
+    ds = xr.open_mfdataset(urls)
+    return ds
 
 def ERA5_read_yearlymaximums():
     ds_ym = xr.open_dataset("/scratch/en0/jwg574/ERA5/yearly_maximums.nc")
@@ -491,7 +501,9 @@ def make_BARPA_monthly_maximum_intermediate(year,
                                             gcm = "CMCC-ESM2", # climate model
                                             experiment = "ssp370",
                                             realisation = "r1i1p1f1",
-                                            freq = "1hr"):
+                                            freq = "1hr",
+                                            debug=False,
+                                           ):
     """
     Arguments:
         year, # which year to create the files for
@@ -622,6 +634,10 @@ def select_australia(ds,latrange=AU_LATRANGE,lonrange=AU_LONRANGE):
     """
     return subset of DS that is within lat and lon range
     """
-    ds = ds.sel(latitude=slice(max(latrange),min(latrange)))
-    ds = ds.sel(longitude=slice(min(lonrange),max(lonrange)))
+    if 'latitude' in ds.coords:
+        ds = ds.sel(latitude=slice(max(latrange),min(latrange)))
+        ds = ds.sel(longitude=slice(min(lonrange),max(lonrange)))
+    else:
+        ds = ds.sel(lat=slice(max(latrange),min(latrange)))
+        ds = ds.sel(lon=slice(min(lonrange),max(lonrange)))
     return ds
