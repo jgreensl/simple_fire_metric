@@ -1,16 +1,16 @@
 #!/bin/bash
 #PBS -P en0
-#PBS -q normal
+#PBS -q normalbw
 #PBS -N BARPA_MonthlyMax
-#PBS -l walltime=4:00:00
-#PBS -l mem=100GB
+#PBS -l walltime=8:00:00
+#PBS -l mem=240GB
 #PBS -l ncpus=16
 #PBS -l wd
 #PBS -l storage=gdata/py18+gdata/hh5+gdata/en0+scratch/en0 
-#PBS -j eo
+#PBS -j oe
 
 # normal queue, wd means run using local directory as working directory
-# -j eo combines std and err outputs into 1 file
+# -j oe combines std and err outputs into 1 file
 
 # Arguments required:
 if [ -z ${y0} ] || [ -z ${y1} ] ; then

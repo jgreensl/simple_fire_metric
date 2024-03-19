@@ -32,31 +32,31 @@ ERA5_varmap={
 TIMESERIES_LOCATIONS = { # "loc" : [lat,lon]
     "Melb":{
         "latlon":[-37.6722, 144.8503], # airport latlon
-        "yx_barpa":[103,368],
+        "yx_barpa":[66, 219],
         "yx_era":[115, 135],
         "color":"magenta",
     },
     "Adel":{
         "latlon":[-34.9063, 138.8397], # hills latlon
-        "yx_barpa":[121,329],
+        "yx_barpa":[84, 180],
         "yx_era":[104, 111],
         "color":"yellow",
     },
     "Sydn":{
         "latlon":[-33.8, 150.7], # west sydney
-        "yx_barpa":[128,406],
+        "yx_barpa":[91, 257],
         "yx_era":[99, 159],
         "color":"orange",
     },
     "Darw":{
         "latlon":[-12.464,130.85], # Darwin
-        "yx_barpa":[266, 277],
+        "yx_barpa":[229, 128],
         "yx_era":[14, 79],
         "color":"red",
     },
     "Dar2":{
         "latlon":[-12.71,131.1], #darwin+.25 southeast
-        "yx_barpa":[265, 279],
+        "yx_barpa":[228, 130],
         "yx_era":[15, 80],
         "color":"grey",
     }, # Test darwin inland
@@ -83,7 +83,8 @@ def BARPA_read_intermediate_years(ystr,
     regex_urls = BARPA_monthly_max_folder + BARPA_intermediate_url(ystr,gcm,experiment,realisation)
     urls = glob(regex_urls)
     urls.sort()
-    print("INFO: Reading %d BARPA dailymax files matching year %s"%(len(urls),ystr))
+    print("INFO: Reading %d BARPA years (of monthly maximums) matching year %s"%(len(urls),ystr))
+    print("    :  ",gcm,experiment,realisation)
     if len(urls) == 0:
         print("ERROR: no urls in ",regex_urls)
     ds = xr.open_mfdataset(urls)
@@ -255,8 +256,8 @@ def calc_monthly_components(da,metric,components):
     # Resample the data array input to get monthly data
     # 'ME' means monthly groups with time label on End of month
     # Currently (20240312) 'ME' fails, 'M' throws warning but OK
-    
-    da_r = da[metric].resample(time='M')
+    # I think ME works OK when running through qsub, just not from jupyterlab instance (?)
+    da_r = da[metric].resample(time='ME')
     
     ds_months = None
     for time_stamp, da_month in da_r:
@@ -329,8 +330,13 @@ def ERA5_read_intermediate(ystr='*'):
     ds = xr.open_mfdataset(urls)
     return ds
 
+def ERA5_read_dailymaximums():
+    ds_dm = xr.open_dataset("./data/ERA5/daily_maximums.nc")
+    #ausmask = get_landmask(pre_2000.FFDI)
+    return ds_dm
+    
 def ERA5_read_yearlymaximums():
-    ds_ym = xr.open_dataset("/scratch/en0/jwg574/ERA5/yearly_maximums.nc")
+    ds_ym = xr.open_dataset("./data/ERA5/yearly_maximums.nc")
     #ausmask = get_landmask(pre_2000.FFDI)
     return ds_ym
 
@@ -421,80 +427,7 @@ def get_landmask(da):
     # lets change it to True where land is, False elsewhere
     return landmask == 0
 
-def get_time_series(locname, force_renew=False, verbose=False):
-    """ Pass in locname from TIMESERIES_LOCATIONS keys 
-        reads FFDI, FFDI_F, DWI_V time series from ERA5 and several BARPA runs
-        uses intermediate pickle file if possible, otherwise requires barpa daily maximum intermediates to have been created
-    """
-    assert locname in TIMESERIES_LOCATIONS.keys(), "%s not in list: %s"%(locname, str(TIMESERIES_LOCATIONS.keys()))
-    
-    # first check if file already created
-    fname = 'data/timeseries_%s.pickle'%(locname)
-    if not force_renew and os.path.isfile(fname):
-        # read and return file data
-        print("INFO: %s found, reading data"%fname)
-        with open(fname,'rb') as ts_file:
-            ts_dict = pickle.load(ts_file)
-        return ts_dict
 
-    # Otherwise we create the time series
-    ## READ ERA5
-    # rename lon,lat to match BARPA
-    ds_ERA5 = ERA5_read_dailymaximums().rename({'longitude':'lon','latitude':'lat'})
-    
-    ## READ BARPA
-    ## Read ssp370, and historical for CMCC GCM
-    ds_cmcc = BARPA_read_intermediate_years("*",experiment='ssp370')
-    ds_cmcc_hist = BARPA_read_intermediate_years("*",experiment='historical')
-    
-    ## Read ssp370 and ssp126, and historical for CMCC GCM
-    ds_esm1_126 = BARPA_read_intermediate_years("*",
-                                                gcm="CSIRO-ACCESS-ESM1-5",
-                                                experiment="ssp126",
-                                                realisation="r6i1p1f1",)
-    ds_esm1_370 = BARPA_read_intermediate_years("*",
-                                                 gcm="CSIRO-ACCESS-ESM1-5",
-                                                 experiment="ssp370",
-                                                 realisation="r6i1p1f1",
-                                                )
-    
-    y_era,x_era = TIMESERIES_LOCATIONS[locname]['yx_era']
-    y_barpa,x_barpa = TIMESERIES_LOCATIONS[locname]['yx_barpa']
-    ts_places = {}
-    
-    ## Loop over metric here: FFDI, FFDI_F, DWI_V
-    for metric in ['FFDI','DWI_V' ,'FFDI_F']: # for now not ffdi_f
-        ## Can loop over barpa models
-        for barpa_model, descriptor in zip([ds_cmcc_hist, ds_cmcc, ds_esm1_370, ds_esm1_126],
-                                           ["%s_%s_CMCC_hist","%s_%s_CMCC_370",'%s_%s_CSIRO_ESM_370','%s_%s_CSIRO_ESM_126']):
-            ts_name = descriptor%(locname,metric)
-            if verbose:
-                print("INFO: Loading ",ts_name)
-            TS = barpa_model[metric][:,y_barpa,x_barpa].load()
-            ## some barpa data uses no leap years, non-standard calendar
-            ## may be slightly out of sync with reality, I think that is why null values get put in?
-            if isinstance(TS.indexes['time'],xr.CFTimeIndex):
-                with warnings.catch_warnings(): # ignore calendar conversion warnings
-                    warnings.simplefilter("ignore")
-                    TS_dti = TS.indexes['time'].to_datetimeindex()
-            else:
-                TS_dti=TS.indexes['time']
-            ## Store as pandas time series, removing nans
-            TS_pd = pd.Series(TS.values,index=TS_dti)
-            if verbose:
-                print("INFO: dropping %d null values from %s"%(TS_pd.isnull().sum(),ts_name))
-            ts_places[ts_name] = TS_pd.dropna()
-    
-        if verbose:
-            print("Loading ERA_5")
-        TSE=ds_ERA5[metric][:,y_era,x_era].load()
-        ts_places['%s_%s_ERA5'%(locname,metric)] = pd.Series(TSE.values,TSE.indexes['time'])
-
-    with open(fname,'wb') as ts_file:
-        print("INFO: Saving %s"%fname)
-        pickle.dump(ts_places,ts_file)
-    
-    return ts_places
 
 def make_BARPA_monthly_maximum_intermediate(year, 
                                             force_renew = False, 
@@ -526,13 +459,19 @@ def make_BARPA_monthly_maximum_intermediate(year,
     # Read year of barpa data
     print("INFO: Reading and calculating FFDI and friends for %4d"%year)
     #vars, year, gcm = "CMCC-ESM2", experiment = "ssp370", realisation = "r1i1p1f1", freq = "1hr",
-    barpa = BARPA_read_year(vars=['hurs','tas','ps','uas','vas'], 
+    barpa0 = BARPA_read_year(vars=['hurs','tas','ps','uas','vas'], 
                             year=year, 
                             gcm=gcm,
                             experiment=experiment,
                             realisation=realisation,
                             freq=freq,
                            )
+    
+    # Subset to AUS
+    barpa = barpa0.where(barpa0.lat < AU_LATRANGE[1],drop=True)
+    barpa = barpa.where(barpa.lat > AU_LATRANGE[0],drop=True)
+    barpa = barpa.where(barpa.lon > AU_LONRANGE[0],drop=True)
+    barpa = barpa.where(barpa.lon < AU_LONRANGE[1],drop=True)
     
     # calculate FFDI_F, FFDI, DWI_V
     barpa = calc_Td(barpa,t='tas',rh='hurs')
@@ -550,13 +489,13 @@ def make_BARPA_monthly_maximum_intermediate(year,
 
     # Update timestamps
     mid_month_stamp = pd.date_range(start='%d-01-01'%year,periods=12,freq='MS')+timedelta(days=14)
-    DS_monthlies.assign_coords({"time": mid_month_stamp})
+    DS_monthlies = DS_monthlies.assign_coords({"time": mid_month_stamp})
     
     # Save these monthly maximums to a file
     os.makedirs(BARPA_monthly_max_folder,exist_ok=True)
     print("INFO: Saving file %s"%fname)
     DS_monthlies.to_netcdf(fname)
-    return DS_monthlies
+    #return DS_monthlies
 
 def make_ERA5_monthly_maximum_intermediate(
     year, 
@@ -634,10 +573,14 @@ def select_australia(ds,latrange=AU_LATRANGE,lonrange=AU_LONRANGE):
     """
     return subset of DS that is within lat and lon range
     """
-    if 'latitude' in ds.coords:
-        ds = ds.sel(latitude=slice(max(latrange),min(latrange)))
-        ds = ds.sel(longitude=slice(min(lonrange),max(lonrange)))
+    if 'lat' in ds.coords:
+        ds = ds.where(ds.lat < latrange[1],drop=True)
+        ds = ds.where(ds.lat > latrange[0],drop=True)
+        ds = ds.where(ds.lon > lonrange[0],drop=True)
+        ds = ds.where(ds.lon < lonrange[1],drop=True)
     else:
-        ds = ds.sel(lat=slice(max(latrange),min(latrange)))
-        ds = ds.sel(lon=slice(min(lonrange),max(lonrange)))
+        ds = ds.where(ds.latitude < latrange[1],drop=True)
+        ds = ds.where(ds.latitude > latrange[0],drop=True)
+        ds = ds.where(ds.longitude > lonrange[0],drop=True)
+        ds = ds.where(ds.longitude < lonrange[1],drop=True)
     return ds
