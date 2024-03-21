@@ -22,20 +22,19 @@
 ### Clone the repository in a directory on GADI
 1. open a terminal
 2. first time only: Making a public key (may be needed by github)
-```
-ssh-keygen -o
-
-```
     - The default location is best (just leave empty when prompted)
     - I wouldn't bother with a passphrase, up to you (you can leave it empty when it prompts)
+```
+ssh-keygen -o
+```
 3. first time only: saving public key on github account
-```
-cat ~/.ssh/id_rsa.pub
-```
     - 'cat' prints contents of file out to the terminal, then you can copy the contents using your cursor
     - ~ is a shortcut for $HOME (your home directory on GADI), this path just needs to match where you saved the public key in the prior step
     - now in your github.com account you go to your account -> SSH and GPG keys
     - paste the public key and give it a title like 'GADI public key'
+```
+cat ~/.ssh/id_rsa.pub
+```
 4. first time only: make a directory and clone the repository
 ```
 mkdir /g/data/en0/<username>
