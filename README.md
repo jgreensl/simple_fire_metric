@@ -21,13 +21,30 @@
 
 ### Clone the repository in a directory on GADI
 1. open a terminal
-2. first time only: make a directory and clone the repository
+2. first time only: Making a public key (may be needed by github)
+```
+ssh-keygen -o
+
+```
+    - The default location is best (just leave empty when prompted)
+    - I wouldn't bother with a passphrase, up to you (you can leave it empty when it prompts)
+3. first time only: saving public key on github account
+```
+cat ~/.ssh/id_rsa.pub
+```
+    - 'cat' prints contents of file out to the terminal, then you can copy the contents using your cursor
+    - ~ is a shortcut for $HOME (your home directory on GADI), this path just needs to match where you saved the public key in the prior step
+    - now in your github.com account you go to your account -> SSH and GPG keys
+    - paste the public key and give it a title like 'GADI public key'
+4. first time only: make a directory and clone the repository
 ```
 mkdir /g/data/en0/<username>
 cd /g/data/en0/<username>
 git clone git@github.com:jgreensl/simple_fire_metric.git
 ```
-3. any subsequent time: navigate to repository, run notebooks
+5. any subsequent time: navigate to repository, run notebooks
+    - notebooks are 'run' most easily using a jupyterlab instance on are.nci.org.au
+    - scripts can be run from a terminal, either through ssh or from are.nci.org.au or even from within the jupyterlab instance (you can spawn a terminal in there)
 
 ### GADI permissions
 need to join several projects:
