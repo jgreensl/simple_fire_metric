@@ -21,27 +21,11 @@
 
 ### Clone the repository in a directory on GADI
 1. open a terminal
-2. first time only: Making a public key (may be needed by github)
-    - The default location is best (just leave empty when prompted)
-    - I wouldn't bother with a passphrase, up to you (you can leave it empty when it prompts)
+2. First time only: copy code so you can use/alter it (but not upload it back to github.com)
 ```
-ssh-keygen -o
+git clone https://github.com/jgreensl/transect_access.git
 ```
-3. first time only: saving public key on github account
-    - 'cat' prints contents of file out to the terminal, then you can copy the contents using your cursor
-    - ~ is a shortcut for $HOME (your home directory on GADI), this path just needs to match where you saved the public key in the prior step
-    - now in your github.com account you go to your account -> SSH and GPG keys
-    - paste the public key and give it a title like 'GADI public key'
-```
-cat ~/.ssh/id_rsa.pub
-```
-4. first time only: make a directory and clone the repository
-```
-mkdir /g/data/en0/<username>
-cd /g/data/en0/<username>
-git clone git@github.com:jgreensl/simple_fire_metric.git
-```
-5. any subsequent time: navigate to repository, run notebooks
+3. any subsequent time: navigate to repository, run notebooks
     - notebooks are 'run' most easily using a jupyterlab instance on are.nci.org.au
     - scripts can be run from a terminal, either through ssh or from are.nci.org.au or even from within the jupyterlab instance (you can spawn a terminal in there)
 
@@ -88,3 +72,20 @@ conda activate /g/data/hh5/public/apps/miniconda3/envs/analysis3
     - you should see a list of 'job ids' appear as the subscripts are 'sent to the queue' to be run by GADI
 5. you can type `qstat` to see what jobs you are running on GADI
 6. after a few hours, you can check that the jobs are done and the netcdf files are created in your outputdir
+
+
+# Setting up github account for saving your own repositories
+
+0. open a terminal in GADI
+1. first time only: Making a public key (may be needed by github)
+    - The default location is best (just leave empty when prompted)
+    - I wouldn't bother with a passphrase, up to you (you can leave it empty when it prompts)
+``` ssh-keygen -o ```
+2. first time only: saving public key on github account
+    - 'cat' prints contents of file out to the terminal, then you can copy the contents using your cursor
+    - ~ is a shortcut for $HOME (your home directory on GADI), this path just needs to match where you saved the public key in the prior step
+3. now in your github.com account you go to your account -> SSH and GPG keys
+   - paste the public key and give it a title like 'GADI public key'
+``` cat ~/.ssh/id_rsa.pub ```
+
+Now you should be able to read/write to repositories you create in github.com. Note that the public key you have created in step 1 can be used by other software (such as gitlab, or anything that uses public/private key pairing).
